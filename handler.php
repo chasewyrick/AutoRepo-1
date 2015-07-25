@@ -1,5 +1,7 @@
 <?php
 
+error_reporting(0);
+
 // $filename: Path to debian package of which the control information is to be retrieved
 function GetPkgInfo($filename)
 {
