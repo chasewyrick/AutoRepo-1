@@ -6,7 +6,7 @@ error_reporting(0);
 function GetPkgInfo($filename)
 {
 	// Open file
-	if (($ar = @fopen($filename, "rb")) === false)
+	if (($ar = fopen($filename, "rb")) === false)
 		return false;
 	$ar_stat = fstat($ar);
 
@@ -37,13 +37,13 @@ function GetPkgInfo($filename)
 		}
 		// Check if the file name is control.tar or control.tar.gz
 		// control.tar.xz is not supported by this implementation
-		if (!strcasecmp($file_header['name'], "control.tar") || !strcasecmp($file_header['name'], "control.tar.gz"))
+		if (!strcmp($file_header['name'], "control.tar") || !strcmp($file_header['name'], "control.tar.gz"))
 		{
 			// Found the control.tar/control.tar.gz file
 			// Read its contents
 
 			$control_size = intval($file_header['size']);
-			if (ftell($ar) + $control_size >= $ar_stat['size'])
+			if (($pos = ftell($ar)) === false || $pos + $control_size >= $ar_stat['size'])
 			{
 				fclose($ar);
 				return false;
@@ -122,12 +122,12 @@ function GetPkgInfo($filename)
 		$file_size = intval($file_header['size']);
 		if ($file_size & 0x1)
 			$file_size++;
-		if (ftell($ar) + $file_size >= $ar_stat['size'])
+		if (($pos = ftell($ar)) === false || $pos + $file_size >= $ar_stat['size'])
 			return false;
 		fseek($ar, $file_size, SEEK_CUR);
 	}
-
-	return true;
+	fclose($ar);
+	return false;
 }
 
 
