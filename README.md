@@ -15,5 +15,8 @@ Considering he revealed to us that it took him 100 hours of work to create his t
 Up to now, I quickly implemented a little function to get the contents of the "control"-file of debian packages, 
 I didn't really care about good error handling yet. 
 
+** Update 25.07.2015, 21:40 (9:40 pm), Central European Time **
+This is basically finished, there is still a bit of polishing to be done and a .htaccess file for rewriting requests to /Packages.bz2 to /handler.php to provide. 
+
 # License
 Check the LICENSE-File. 
