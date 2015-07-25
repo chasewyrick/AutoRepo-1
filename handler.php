@@ -1,7 +1,7 @@
 <?php
 
-// $filename: Debian Package Path and Filename 
-function getControlFile($filename)
+// $filename: Path to debian package of which the control information is to be retrieved
+function GetPkgInfo($filename)
 {
 	// Open file
 	if (($ar = @fopen($filename, "rb")) === false)
@@ -129,7 +129,7 @@ function getControlFile($filename)
 }
 
 
-function comparePkgVerPartial($ver1, $ver2)
+function CompareVersionNumber($ver1, $ver2)
 {
 	for ($i = 0, $vl1 = strlen($ver1), $vl2 = strlen($ver2); $i < $vl1 && $i < $vl2; $i++)
 	{
@@ -151,10 +151,12 @@ function comparePkgVerPartial($ver1, $ver2)
 	return 0;
 }
 
-// returns: -1 when $ver1 < $ver2
-//			0 when equal
-//			1 when $ver1 > $ver2
-function comparePkgVer($ver1, $ver2)
+// $ver1: First version number
+// $ver2: Second version number
+// returns: -1 if $ver1 < $ver2
+//			0 if $ver1 == $ver2
+//			1 if $ver1 > $ver2
+function CompareVersions($ver1, $ver2)
 {
 	// Prepare associative arrays for version numbers
 	$version1 = array("epoch" => 0, "debian_revision" => "", "upstream_version" => $ver1);
@@ -199,46 +201,89 @@ function comparePkgVer($ver1, $ver2)
 		$version2['upstream_version'] = substr($version2['upstream_version'], 0, $rev_pos);
 
 	// Compare upstream version
-	$cmpres = comparePkgVerPartial($version1['upstream_version'], $version2['upstream_version']);
+	$cmpres = CompareVersionNumber($version1['upstream_version'], $version2['upstream_version']);
 	if ($cmpres)
 		return $cmpres;
 
 	// Compare debian revision
-	$cmpres = comparePkgVerPartial($version1['debian_revision'], $version2['debian_revision']);
+	$cmpres = CompareVersionNumber($version1['debian_revision'], $version2['debian_revision']);
 	return $cmpres;
 }
 
-// $dir: Directory containing deb files
-function generatePackagesForDir($dir)
+// $dir: Directory to search for debian packages
+function GeneratePackages($dir)
 {
 	if (($debs = glob($dir . "/*.deb")) === false)
 		return false;
 	$packages = array();
 	foreach ($debs as $deb) {
-		$control = getControlFile($deb);
-		if ($control === false)
+		if (($control = GetPkgInfo($deb)) === false)
 			continue;
 
-		if (isset($packages[$control['Package']]))
-		{
-			// Compare version numbers
-			if (comparePkgVer($control['Version'], $packages[$control['Package']]['Version']) > 0)
-				$packages[$control['Package']] = $control;
-		}
-		else
+		if (!isset($packages[$control['Package']]))
 			$packages[$control['Package']] = $control;
+		else
+			// Compare version numbers
+			if (CompareVersions($control['Version'], $packages[$control['Package']]['Version']) > 0)
+				$packages[$control['Package']] = $control;
 	}
+
 	$packages_string = "";
 	foreach ($packages as $info)
 	{
 		foreach ($info as $fieldname => $value)
 			$packages_string .= $fieldname . ": " . $value . "\n";
+	
 		$packages_string .= "\n";
 	}
-
 	return $packages_string;
 }
 
-$packages = generatePackagesForDir("debs");
-if ($packages !== false)
-	echo $packages;
+// Generate new Packages.bz2 if Packages.bz2 does not exist or if the time of the last modification was
+// before the time of the last modification of the debs-Directory
+$size = 0;
+if (!($exists = file_exists("Packages.bz2")) || ($size = filesize("Packages.bz2")) === false || ($pbz2mtime = filemtime("Packages.bz2")) === false || ($debsmtime = filemtime("debs/.")) === false || $pbz2mtime < $debsmtime)
+{
+	// Return the old or a fake Packages.bz2
+	ob_end_clean();
+	header("Connection: close");
+	ignore_user_abort(1);
+	ob_start();
+	header("Content-Type: application/x-bzip2");
+	header("Content-Disposition: filename=\"Packages.bz2\"");
+	if ($exists && $size !== false) {
+		readfile("Packages.bz2");
+		header("Content-Length: " . $size);
+	} else {
+		$fakepkg = bzcompress("");
+		echo $fakepkg;
+		header("Content-Length: " . strlen($fakepkg));
+	}
+	ob_end_flush();
+	flush();
+	session_write_close();
+
+	// Generate new Packages.bz2
+
+	// Exit if the Packages.bz2 file is locked by another instance of this script
+	if (file_exists("Packages.lock"))
+		exit();
+	// Create lock
+	file_put_contents("Packages.lock", "");
+	// Retrieve Packages string for "debs"-Directory
+	$packages = GeneratePackages("debs");
+	if ($packages !== false)
+		file_put_contents("Packages.bz2", bzcompress($packages));
+
+	// Remove lock
+	unlink("Packages.lock");
+	exit();
+}
+// Return the current Packages.bz2
+else
+{
+	header("Content-Type: application/x-bzip2");
+	header("Content-Disposition: filename=\"Packages.bz2\"");
+	header("Content-Length: " . $size);
+	readfile("Packages.bz2");	
+}
